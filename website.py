@@ -61,10 +61,10 @@ def del_pup():
     form=Delform()
     if form.validate_on_submit():
         id=form.id.data
-        pup=form.query.get(id)
+        pup=Puppy.query.get(id)
         db.session.delete(pup)
         db.session.commit()
-        return render_template(url_for('list_pup'))
+        return redirect(url_for('list_pup'))
     return render_template("delete.html",form=form)
 
 
