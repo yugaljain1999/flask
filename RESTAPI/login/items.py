@@ -1,9 +1,12 @@
-from flask_restful import Resource
+from flask_restful import Resource,reqparse
 from flask_jwt import jwt_required
 import sqlite3
 # Here now we have separated the classes of items in separate file named as items.py and will try to creating a database for items also like we did for username and user_id recently
 
 class Item(Resource):
+    parser=reqparse.RequestParser()
+    parser.add_argument('price',type=float,required=True,help="Can't be blank")
+
 
 
     @jwt_required()
@@ -27,17 +30,21 @@ class Item(Resource):
         select_query="SELECT * FROM items WHERE name=?"
         result=cursor.execute(select_query,(name,))
         row=result.fetchone()
-        if row:
-            user=cls(*row)
-        else:
-            user=None
         connection.close()
-        return user
+        if row:
+            return {'itme':{'name':row[0],'price':row[1]}}
 
     def post(self,name):
-        item={'name':name,'price':17000}
-        items.append(item)
+        if self.find_by_name(name):
+            return {'message':"This name already exist"}
+        data=Item.parser.parse_args()
+        item={'name':name,'price':data['price']}
+        try:
+            Item.insert(item)
+        except:
+            {'message':"An error occured during inserting an item"}
         return item,201
+
     @classmethod
     def insert(cls,item):
         connection=sqlite3.connect()
@@ -46,9 +53,9 @@ class Item(Resource):
         cursor.execute(insert_query,(item['name'],item['price']))
         connection.commit()
         connection.close()
-        
-        
-        
+
+
+    @jwt_required()
     def delete(self,name):
         connection=sqlite3.connect('data.db')
         cursor=connection.cursor()
@@ -57,16 +64,34 @@ class Item(Resource):
         connection.commit()
         connection.close()
         return {'message':'Item deleted from given list'}
-    def put(self,name):
-        data=request.get_json()
-        item=next(filter(lambda x: x['name']==name,items),None)
-        # After acheiving none condition it doesn't matter that how many times we are calling put method
+    @jwt_required()
+    def put(self, name):
+        data = Item.parser.parse_args()
+        item = self.find_by_name(name)
+        updated_item = {'name': name, 'price': data['price']}
         if item is None:
-            item={'name':name,'price':18000}
-            items.append(item)
+            try:
+                Item.insert(updated_item)
+            except:
+                return {"message": "An error occurred inserting the item."}
         else:
-            item.update(data)    # Here we are updating the value of price if name is same because name already eist otherwise name will also has to be changed
-        return item,{'message':'item is updated'}
+            try:
+                Item.update(updated_item)
+            except:
+                raise
+                return {"message": "An error occurred updating the item."}
+        return updated_item
+
+    @classmethod
+    def update(cls, item):
+        connection = sqlite3.connect('data.db')
+        cursor = connection.cursor()
+
+        query = "UPDATE {table} SET price=? WHERE name=?".format(table=cls.TABLE_NAME)
+        cursor.execute(query, (item['price'], item['name']))
+
+        connection.commit()
+        connection.close()
 class Items(Resource):
     def get(self,clas):
         item=next(filter(lambda x: x['cla']==clas,items),None)
@@ -81,8 +106,9 @@ class list(Resource):
         connection=sqlite3.connect('data.db')
         cursor=connection.cursor()
         select_query="SELECT * FROM items"
-        row=cursor.execute(select_query)
+        result=cursor.execute(select_query)
+        items=[]
+        for row in result:
+            items.append({'name':row[0],'price':row[1]})
         connection.close()
-        if row:
-            return {"items":items}
-        return {'message':"items doesn't exist"}
+        return {"items":items}
